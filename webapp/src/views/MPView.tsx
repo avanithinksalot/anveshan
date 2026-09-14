@@ -124,7 +124,7 @@ export function MPView({ topbar }: { topbar: ReactNode }) {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-3">
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Sanctioned Portfolio Works"      value={(t?.works ?? works.length ?? '—').toLocaleString?.('en-IN') ?? t?.works ?? '—'} />
         <Stat label="High Risk Flagged"              value={(t?.high_works ?? '—').toLocaleString?.('en-IN') ?? t?.high_works ?? '—'}      tone="high" />
         <Stat label="Hard Rule Breaches"             value={(t?.hard_violations ?? '—').toLocaleString?.('en-IN') ?? t?.hard_violations ?? '—'} tone="med" />

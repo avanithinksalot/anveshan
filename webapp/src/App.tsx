@@ -22,36 +22,37 @@ function Topnav({ title, pill }: { title: string; pill: string }) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-edge bg-panel shadow-sm">
-      <div className="flex h-12 items-center gap-4 px-5">
+      <div className="flex h-12 items-center gap-3 px-3 sm:px-5">
         {/* Brand */}
         <button
           onClick={() => nav('/login')}
-          className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity"
+          className="flex items-center gap-1.5 shrink-0 hover:opacity-80 transition-opacity"
           title="Back to role selection"
         >
-          <AnveshanLogo size={34} />
-          <span className="font-bold text-[13px] text-fg tracking-wide">ANVESHAN</span>
+          <AnveshanLogo size={30} />
+          <span className="font-bold text-[13px] text-fg tracking-wide hidden xs:inline sm:inline">ANVESHAN</span>
         </button>
 
         <div className="h-5 w-px bg-edge shrink-0" />
 
-        {/* Page title */}
+        {/* Page title — truncated on mobile */}
         <div className="min-w-0 flex-1">
-          <span className="text-[13px] font-semibold text-fg truncate">{title}</span>
+          <span className="text-[12px] sm:text-[13px] font-semibold text-fg line-clamp-1">{title}</span>
         </div>
 
-        {/* Pill */}
-        <span className="rounded border border-[#DC6B00]/50 bg-[#DC6B00]/8 px-2.5 py-0.5 font-mono text-[10px] text-[#DC6B00] font-semibold whitespace-nowrap shrink-0">
+        {/* Pill — hidden on small screens */}
+        <span className="hidden md:inline-flex rounded border border-[#DC6B00]/50 bg-[#DC6B00]/8 px-2.5 py-0.5 font-mono text-[10px] text-[#DC6B00] font-semibold whitespace-nowrap shrink-0">
           {pill}
         </span>
 
         {/* Role badge */}
         {meta && (
           <span
-            className="rounded border px-2.5 py-0.5 font-mono text-[10px] font-semibold whitespace-nowrap shrink-0"
+            className="rounded border px-2 sm:px-2.5 py-0.5 font-mono text-[10px] font-semibold whitespace-nowrap shrink-0"
             style={{ color: meta.accent, borderColor: meta.accent + '50', background: meta.accent + '10' }}
           >
-            {meta.label}
+            <span className="hidden sm:inline">{meta.label}</span>
+            <span className="sm:hidden">{meta.label.split(' ')[0]}</span>
           </span>
         )}
       </div>
@@ -77,7 +78,7 @@ function View({ title, pill, content }: { title: string; pill: string; content: 
   return (
     <AppShell>
       <Topnav title={title} pill={pill} />
-      <main className="flex-1 px-6 py-5 overflow-x-auto">{content}</main>
+      <main className="flex-1 px-3 py-4 sm:px-6 sm:py-5 overflow-x-hidden">{content}</main>
     </AppShell>
   );
 }

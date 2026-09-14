@@ -162,7 +162,7 @@ export function DAView({ topbar }: { topbar: ReactNode }) {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-3">
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Works in District Queue"  value={(t?.works            ?? alerts.length ?? '—')?.toLocaleString?.('en-IN') ?? t?.works ?? '—'} />
         <Stat label="High Risk Flagged"        value={(t?.high_works       ?? '—')?.toLocaleString?.('en-IN') ?? t?.high_works ?? '—'}              tone="high" />
         <Stat label="Hard Rule Breaches"       value={(t?.hard_violations  ?? '—')?.toLocaleString?.('en-IN') ?? t?.hard_violations ?? '—'}        tone="med"  />

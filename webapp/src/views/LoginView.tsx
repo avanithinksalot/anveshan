@@ -52,7 +52,7 @@ export function LoginView() {
           <div className="flex-1 bg-[#138808]" />
         </div>
 
-        <div className="px-8 py-8">
+        <div className="px-5 py-6 sm:px-8 sm:py-8">
 
           {/* Logo + brand */}
           <div className="flex flex-col items-center mb-5">

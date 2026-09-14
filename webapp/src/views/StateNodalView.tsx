@@ -126,14 +126,14 @@ export function StateNodalView({ topbar }: { topbar: ReactNode }) {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-3">
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Total Works in Scope"  value={(t?.works            ?? alerts.length ?? '—').toLocaleString?.('en-IN') ?? t?.works ?? '—'} />
         <Stat label="High Risk Flagged"     value={(t?.high_works       ?? '—').toLocaleString?.('en-IN') ?? t?.high_works ?? '—'}      tone="high" />
         <Stat label="Hard Rule Breaches"    value={(t?.hard_violations  ?? '—').toLocaleString?.('en-IN') ?? t?.hard_violations ?? '—'} tone="med"  />
         <Stat label="Sanctioned Total"      value={t ? '₹' + Math.round(t.total_sanctioned).toLocaleString('en-IN') : '—'} />
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Panel title="High-Risk Works by District" className="p-3">
           {distRows.length ? (
             <ResponsiveContainer width="100%" height={340}>

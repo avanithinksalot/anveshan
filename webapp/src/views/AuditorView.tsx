@@ -62,7 +62,7 @@ export function AuditorView({ topbar }: { topbar: ReactNode }) {
         </div>
       )}
 
-      <div className="mb-4 grid grid-cols-4 gap-3">
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Total Decisions Recorded" value={c?.total     ?? '—'} />
         <Stat label="Cleared Works"            value={c?.cleared   ?? '—'} tone="low" />
         <Stat label="Escalated Cases"          value={c?.escalated ?? '—'} tone="med" />
@@ -70,8 +70,8 @@ export function AuditorView({ topbar }: { topbar: ReactNode }) {
       </div>
 
       {/* Geographic audit density map */}
-      <div className="mb-4 grid grid-cols-3 gap-4">
-        <Panel title="Confirmed Irregularities — Geographic Audit Density" className="col-span-2 p-3">
+      <div className="mb-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Panel title="Confirmed Irregularities — Geographic Audit Density" className="lg:col-span-2 p-3">
           <IndiaMap
             data={MOCK_STATE_AUDIT}
             subtitle="Confirmed irregularities by state · Darker = more confirmed cases · Click to filter"

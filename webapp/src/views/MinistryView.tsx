@@ -447,7 +447,7 @@ export function MinistryView({ topbar }: { topbar: ReactNode }) {
         </div>
       )}
 
-      <div className="mb-4 grid grid-cols-4 gap-3">
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Total Works Monitored (National)" value={(t?.works ?? '—').toLocaleString?.('en-IN') ?? t?.works ?? '—'} />
         <Stat label="High Risk Flagged"     value={(t?.high_works     ?? '—').toLocaleString?.('en-IN') ?? t?.high_works     ?? '—'} tone="high" />
         <Stat label="Hard Rule Breaches"    value={(t?.hard_violations ?? '—').toLocaleString?.('en-IN') ?? t?.hard_violations ?? '—'} tone="med"  />
@@ -455,8 +455,8 @@ export function MinistryView({ topbar }: { topbar: ReactNode }) {
       </div>
 
       {/* Geographic density map + tier donut */}
-      <div className="mb-4 grid grid-cols-3 gap-4">
-        <Panel title="Geographic Risk Density Map — All States" className="col-span-2 p-3">
+      <div className="mb-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Panel title="Geographic Risk Density Map — All States" className="lg:col-span-2 p-3">
           <IndiaMap
             data={stateRiskData}
             subtitle="Click any state to highlight · Hover for details · Darker = more flagged works"
