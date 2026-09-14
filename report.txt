@@ -1,0 +1,202 @@
+================================================================================
+      MPLADS AI ANOMALY DETECTION — MODEL ACCURACY REPORT
+================================================================================
+Project : MPLADS Anomaly Detection Console (SIH PS 102 MVP)
+Scope   : 48,925 MPLADS works (full real-state export, Modules 1-9 pipeline)
+Date    : 2026-09-14
+Source  : log.md verified evidence + backend/src/* test harness outputs
+         (test_db 20/20, test_api 15/15, verify_everything module-wide PASS)
+
+================================================================================
+1. EXECUTIVE SUMMARY
+================================================================================
+
+The prototype is a 4-layer risk-scoring system, NOT a single classifier.
+Final risk comes from a deterministic hard-rule engine + an Ensemble ML layer
+(Isolation Forest + XGBoost) + SHAP explanation, fused into a composite score.
+
+Headline held-out accuracy (XGBoost supervised module, n = 9,785):
+    ACCURACY  = 99.87 %
+    PRECISION = 99.54 %     RECALL = 98.47 %    F1 = 99.00 %
+    ROC AUC   = 0.992
+
+IMPORTANT HONEST CAVEAT (see section 7):
+This accuracy is measured against DERIVED labels (rule-engine + IF outcomes),
+not against real audit ground truth, so it is OPTIMISTIC BY CONSTRUCTION.
+It demonstrates that the risk surface is well-calibrated/self-consistent,
+NOT that real-world fraud is caught at 99.9%. True accuracy is collected via
+the Module 15 Auditor feedback loop and requires retraining on those labels.
+
+================================================================================
+2. MODEL STACK (per build prompt.md)
+================================================================================
+
+  Layer                    Module        What it outputs
+  ------------------------ ------------- --------------------------------------
+  Hard rule engine         M2-M3         2,749 deterministic violations (bypass)
+  Isolation Forest         M4            per-work anomaly score [0,1] (unsupervised)
+  XGBoost + SMOTE          M5            per-work risk probability [0,1] (derived labels)
+  SHAP                     M6            per-work reason + global feature importance
+  Text (TF-IDF+rapidfuzz)  M8            similarity_score (dup detection)
+  Image (imagehash+PIL)    M9            image tamper / near-dup signal
+  Composite fuse           M7            final risk_score + Low/Medium/High tier
+
+  Composite formula (when NO hard-rule bypass):
+      risk = 100 * (0.40 * isolforest + 0.40 * xgb_prob + 0.20 * avg(vendor, sim))
+  Hard-rule bypass (deterministic, replaces ML):
+      risk = 80 + 20 * severity(max(overdue_days/730, disallowed 0.9, ceil_ratio))
+  Tiers: High >= 70 | Medium >= 40 | Low < 40
+
+================================================================================
+3. MULTI-CLASS / TIER-LEVEL ACCURACY (composite final output)
+================================================================================
+
+  Inputs used                                Count / 48,925     Share
+  ---------------------------------------   ----------------   ------
+  Hard-rule violations (bypass route)            2,749          5.6%
+    |- completed-overdue (365-730d band)         2,690
+    |- disallowed category (context-aware)           64
+    |- allocation ceiling                             0
+  IF outlier prior                                ~5.0%
+  Known-good verified works (label checks)           5        ALL passed
+  Similarity candidates (>0.8 actual)                439
+  Works scoring in High risk tier                 (dashboard-verified)
+
+  Deterministic hard-rule layer = 100% reproducible (no ML variance).
+  A rule breach ALWAYS lands in 80-100 (High), proportionally to severity:
+      e.g. 34d overdue -> 80.9 | 354d overdue -> 89.7 | disallowed cat -> 98.0
+
+  Sanity checks (verify_everything.py PASS):
+      - 5 hand-verified compliant works: IF <= 0.397, XGB <= 0.0018, hard-rule = 0
+        (zero false triggers)  ...................... PASS
+      - completed_overdue = 2,690 exactly .......... PASS
+      - completed_overdue_2yr = 0 (extension band) . PASS
+      - Medium alerts all >= 40, High alerts built
+        on score >= 70 thresholds ................... PASS
+
+================================================================================
+4. SUPERVISED MODULE (XGBoost + SMOTE) — FULL METRIC BREAKDOWN
+================================================================================
+
+  Setup : 48,925 works, 80/20 stratified split, metrics on held-out n = 9,785.
+          XGBClassifier (200 trees, depth 6, lr 0.05) inside imblearn pipeline,
+          SMOTE up-samples minority 5.6% -> 50/50.
+          Labels DERIVED: positive = any_hard_violation==1 OR
+          (if_predicted_outlier==1 AND if_anomaly_score>0.6).
+
+  Confusion matrix (held-out):
+                          Predicted N       Predicted P
+          Actual N        9,129 (TN)               3 (FP)
+          Actual P             10 (FN)           643 (TP)
+
+  Derived metrics:
+      ACCURACY  = (TN+TP)/(TN+FP+FN+TP)   = 9,772 / 9,785 = 99.87 %
+      PRECISION = TP/(TP+FP)              = 643 / 646      = 99.54 %
+      RECALL    = TP/(TP+FN)              = 643 / 653      = 98.47 %
+      F1-SCORE  = 2*P*R/(P+R)                               = 99.00 %
+      ROC AUC   = 0.992
+
+  Generalization signals:
+      - 5 known-good works -> xgb_risk_probability <= 0.0018 (very low)  PASS
+      - Top-10 risk works ALL are genuine hard-rule hits (risk ~0.9999)
+      - Distribution mean 0.071 / median 0.002 / p75 0.0056 / max 0.9999
+
+  Top predictive features (importance):
+      isolforest if_anomaly_score (0.459), is_overdue_1yr_rule (0.358),
+      days_sanctioned_to_completion, image_missing_flag, sanction_amount.
+
+================================================================================
+5. UNSUPERVISED MODULE (Isolation Forest) — CALIBRATION
+================================================================================
+
+  contamination prior = 0.05 (matches the ~5.6% hard-rule hit rate).
+  Score = inverted score_samples, min-max normalised to [0,1].
+
+  Distribution      mean 0.152 | median 0.103 | p95 0.491 | p99 0.655 | max 1.000
+  Bands            0.0-0.2: 36,768 works | 0.8-1.0: 145 works
+  Sanity           5 known-good compliant works all <= 0.397 (none flagged)  PASS
+  Coherence        Top drivers = large-value, long-duration multi-IDA/multi-MP
+                   works (High Mast Light 9.85M/597d, LED semi-high mast 46.47M)
+  Bottom-5         small ~250-300K roads/drains/borewells, single vendor, ~0.000
+
+================================================================================
+6. SUPPORT DETECTORS (text + image)
+================================================================================
+
+  Text similarity (TF-IDF + rapidfuzz, Module 8):
+      - 439 works with similarity > 0; max 1.0; 48,486 unique descriptions
+      - Higher similarity raises composite risk via the 20% vendor/sim weight
+        and flags duplicate-billing candidates for review.
+
+  Image forensics (imagehash + Pillow, Module 9):
+      - Perceptual-hash tamper test battery PASSED on synthetic tampering
+        (resize+crop+gamma-shift+Gaussian-blur ~3% alterations); near-duplicate
+        and daily-scene false-positive checks passed (no false positives on
+        normal site imagery).
+      - NOTE: shipped export contains a real-image validation gap (images not
+        exported with the dataset) — Module 9 is validated on synthetic
+        tampering until real sample photos are supplied.
+
+================================================================================
+7. HONEST LIMITATIONS (do not skip this section)
+================================================================================
+
+  1. DERIVED LABELS. The XGBoost "ground truth" is built from the rule engine
+     and Isolation Forest, whose outputs are ALSO model features
+     (is_overdue_1yr_rule, if_anomaly_score). The model is partially predicting
+     its own labels -> 99.87% accuracy is self-consistent, not real-world.
+
+  2. CLASS IMBALANCE. Only ~5.6% positive; SMOTE re-balances training data, so
+     held-out metrics reflect the balanced view. In production you would
+     re-evaluate at the true prior.
+
+  3. HARD-RULE HIGH = GUILT-FREE. A work pushed to High by the 365-day overdue
+     rule is a REVIEW candidate, not a conviction. The extension band
+     (365-730d) is surfaced explicitly for auditors.
+
+  4. DATA COMPLETENESS. Several amount columns (disbursed_vs_sanctioned ratio,
+     etc.) are 0% populated in the export; near-empty features are median-
+     imputed and coverage is tracked so low-coverage scores can be discounted.
+
+  5. REAL GROUND TRUTH NOT YET AVAILABLE. Until the Auditor loop generates
+     verified labels at scale, "accuracy" here means pipeline calibration.
+
+  HOW TRUE ACCURACY GETS MEASURED (built, awaiting data):
+      Auditor console records cleared / escalated / confirmed decisions per
+      work (Postgres audit_actions). These verified labels feed a retraining
+      path that recomputes precision/recall/F1 against REAL human decisions.
+      Current auditor decision volume on the live store: 7 recorded actions
+      (4 escalated) — a start, not a statistically significant set yet.
+
+================================================================================
+8. VERIFICATION STATUS (evidence gates)
+================================================================================
+
+  python -m src.test_db            -> 20 / 20 PASS  (storage round-trips, scores)
+  python -m src.test_api           -> 15 / 15 PASS  (all endpoints + auth)
+  python -m src.verify_everything  -> full pipeline assertions PASS
+       (completed_overdue=2690, 2yr=0, IF<=0.397 on known-good, XGB<=0.0018,
+        medium alerts >=40, score distribution, hard-severity contract 80-100)
+  Docker images (api + web)        -> built OK
+  RBAC auth matrix (10 checks)     -> all green
+
+  Model metrics quoted above are frozen into the pipeline's Module 5 test
+  assertions (precision/recall/support) so any regression is caught on re-run.
+
+================================================================================
+SUMMARY TABLE — WHAT TO REPORT ON STAGE
+================================================================================
+
+  Metric                          Value       Basis
+  ------------------------------  ----------  ---------------------------------
+  Overall operating accuracy      99.87 %     XGB held-out (n = 9,785), derived labels
+  Precision                       99.54 %     above
+  Recall                          98.47 %     above
+  F1-Score                        99.00 %     above
+  ROC AUC                         0.992       above
+  Hard-rule reproducibility       100 %       deterministic engine (bypass >= 80)
+  False triggers on known-good       0/5      both ML modules + rule engine
+  Real ground-truth accuracy      PENDING     auditor loop -> retrain (see 7.5)
+
+  Report generated from the verified build log (log.md) + test harnesses.
+================================================================================

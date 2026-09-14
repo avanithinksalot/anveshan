@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mplads}
+      POSTGRES_USER: ${POSTGRES_USER:-mplads}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mplads}
+    ports:
+      - "5432:5432"
+    volumes:
+      - mplads_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_DSN: postgresql+psycopg2://${POSTGRES_USER:-mplads}:${POSTGRES_PASSWORD:-mplads}@db:5432/${POSTGRES_DB:-mplads}
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-change-me}
+      JWT_TTL_SECONDS: ${JWT_TTL_SECONDS:-43200}
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-0}
+      MPLADS_DATA_DIR: ${MPLADS_DATA_DIR:-/data/datasets}
+    volumes:
+      - ${MPLADS_OUTPUT_DIR:-./output}:/app/output
+      - ${MPLADS_DATA_DIR:-./datasets}:/data/datasets:ro
+    ports:
+      - "8000:8000"
+
+  web:
+    build: ./webapp
+    depends_on:
+      - api
+    ports:
+      - "4173:80"
+
+volumes:
+  mplads_pgdata:

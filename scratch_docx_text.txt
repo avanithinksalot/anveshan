@@ -1,0 +1,294 @@
+AI-Powered MPLADS Anomaly, Fraud & Inefficiency Detection Platform
+Technical Solution Document — SIH 2026, Problem Statement 26102
+Organization: MoSPI | Department: Data Informatics & Innovation Division (DIID) | Category: Software | Theme: Smart Automation
+1. Executive Summary
+The proposed system is a layered detection platform that turns raw MPLADS operational data — allocation, recommendation, sanction, completion, expenditure and calamity-consent records — into prioritized, explainable risk signals for auditors, District Authorities, State Nodal Departments, MPs, and the Ministry. It combines four detection mechanisms rather than relying on a single model:
+Hard rule checks — deterministic violations of explicit MPLADS rules (1-year completion window, disallowed categories, allocation ceilings, SC/ST quotas).
+Statistical anomaly detection — unsupervised outlier scoring (Isolation Forest) on cost, timeline and vendor-concentration features.
+Supervised risk scoring — an XGBoost model trained on rule-flag and anomaly-score patterns, calibrated with SHAP explanations so every flag has a human-readable reason.
+Similarity detection — text similarity for duplicate/near-duplicate works and perceptual image hashing for reused completion photos.
+All four feed a single composite Risk Score (0–100) per work, surfaced through role-based dashboards, with an auditor feedback loop that improves the model over time.
+Figure 1: How the four detection mechanisms combine into one composite risk score.
+2. Problem Understanding
+PS 26102 asks for an AI/ML platform to detect anomalies, fraud and inefficiencies across MPLADS fund utilization and work execution. Based on the real portal data now available, the concrete problem categories this solution targets are:
+#
+Problem
+Detection approach used
+1
+Fake or duplicate works
+Work-ID exact match + text similarity on Work Description
+2
+Cost overruns
+Sanctioned-vs-Disbursed ratio + category-wise Isolation Forest outlier score
+3
+Stalled / delayed projects
+Work Status stage duration vs. the official 1-year sanction-to-completion rule
+4
+Fund misuse (category drift)
+Category/description comparison between sanction stage and completion stage
+5
+Weird approval / vendor patterns
+Vendor concentration across IDAs/MPs + individual-vs-company heuristic
+6
+Image / geo-tag verification
+Perceptual hash duplicate-image detection; CV plausibility check (stretch goal)
+7
+Disallowed spend (religious sites, trusts, non-durable assets)
+Keyword / classifier rule check on Work Description & Category
+8
+Equity compliance (SC/ST, differently-abled provisions)
+Portfolio-level compliance ratio per MP against mandated quotas
+3. Data Assets
+Six linked tables were exported from the eSAKSHI/MPLADS dashboard. Together they cover the full lifecycle of a work — recommendation, sanction, completion and expenditure — plus MP-level allocation and calamity consent.
+Table
+Rows
+Grain
+Key fields
+Allocated_Limit_for_Honble_MPs
+544
+1 row / MP
+State, MP, Constituency, Allocated Amount
+Amount_consented_for_Calamity
+13
+1 row / consent event
+Calamity Type/Name, MP, Date, Consent Amount
+Works_Recommended
+8,001
+1 row / recommended work
+Work (embeds Work ID), Category, MP, IDA, Recommended Date/Amount, Sanction Date
+Works_Sanctioned
+9,001
+1 row / sanctioned work
+Work, Sanction Date/Amount, Work Status (pipeline stage)
+Works_Completed
+35,200
+1 row / completed work
+Work, Description, Image, Completion Date, Amount Disbursed
+Expenditure_on_Completed_and_On-going_Works
+85,120
+1 row / payment
+Work ID, IDA, Vendor Name, Expenditure Date, Payment Status, Fund Disbursed
+3.1 Join key & master lifecycle table
+Every work carries an identifier of the form WS/MP<id>/<year>-<year>/<serial> embedded as a prefix inside the “Work” field. Extracting this via regex into a clean work_id column makes all six tables joinable. The pipeline builds one master table, one row per work:
+Recommended Amount → Sanction Amount → Σ(Expenditure Fund Disbursed) → Completion Date → Work Status
+This master table is what every downstream feature and model operates on.
+Figure 2: The six source tables joined via work_id into the master lifecycle table.
+3.2 Data quality handling
+Strip footer/summary rows (e.g. a “Grand Total” row was found sitting inside Works_Sanctioned).
+Normalize Indian comma-formatted numbers (“17,35,60,04,099.87”) before casting to numeric.
+Treat “Image” values of literal N/A or the non-descriptive placeholder “Images” as missing until actual image files/URLs are confirmed available from the portal.
+Handle garbled/mis-encoded regional-language text in Work Description with a language-aware cleaning step rather than dropping those rows.
+4. System Architecture
+The platform is organized into eight layers, designed so each can be built, tested and scaled independently.
+Layer
+Responsibility
+Key technology
+1. Ingestion
+Pull/receive the six source tables (manual export today; scheduled API pull once MoSPI exposes one)
+Python, pandas, cron / Airflow
+2. Cleaning & Normalization
+Footer removal, numeric/date normalization, text cleanup, work_id extraction
+pandas, regex
+3. Entity Resolution
+Join all tables into the master work-lifecycle table; resolve MP/IDA/vendor name variants
+pandas merge, fuzzy matching (rapidfuzz)
+4. Feature Engineering
+Compute ratios, durations, concentration scores, similarity scores (see Section 6)
+pandas, numpy, scikit-learn
+5. Detection Engine
+Rule engine + Isolation Forest + XGBoost + SHAP + text/image similarity
+scikit-learn, XGBoost, SHAP, imagehash
+6. Risk Aggregation
+Combine rule flags + model scores into one 0–100 Risk Score per work, with reason codes
+Python scoring service
+7. Storage & API
+Persist scored works, alerts, case actions; serve REST endpoints
+PostgreSQL, SQLAlchemy, FastAPI
+8. Presentation
+Role-based dashboards (MP / District / State / Ministry) with drill-down and SHAP explanations
+React, Recharts, D3.js
+Figure 3: The eight-layer system architecture, from ingestion to presentation.
+4.1 High-level data flow
+Source Tables  →  Cleaning & Join  →  Feature Engineering  →  Rule Engine (hard flags)  →  Isolation Forest (anomaly score)  →  XGBoost + SMOTE (risk probability)  →  SHAP (explanation)  →  Composite Risk Score  →  PostgreSQL  →  FastAPI  →  React Dashboards  →  Auditor Action (clear / escalate / investigate)  →  feedback stored  →  periodic model retraining.
+Figure 4: The high-level data flow, from source tables to auditor feedback and retraining.
+5. End-to-End Workflow
+Extract the six source tables (batch export today; direct DB/API connection in production).
+Clean: drop footer rows, normalize currency/date fields, extract work_id, normalize entity names (MP, IDA, Vendor).
+Join into the master lifecycle table (Recommended → Sanctioned → Completed → Expenditure, keyed on work_id).
+Compute engineered features (Section 6) at work-level, vendor-level and MP-level granularity.
+Apply the deterministic rule engine — any hard violation is auto-flagged regardless of ML score.
+Run Isolation Forest on continuous features to produce an unsupervised anomaly score per work.
+Run the XGBoost classifier (trained on rule-flag patterns + anomaly scores + validated CAG-report cases) to produce a calibrated risk probability.
+Run SHAP on the XGBoost output to generate a human-readable reason string per flagged work.
+Combine rule flags + Isolation Forest score + XGBoost probability into one composite Risk Score (Section 8) and store it.
+Serve the results via FastAPI to role-based React dashboards; auditors mark cases cleared / escalated / under investigation.
+Feed auditor decisions back as labels for the next training cycle (active learning loop).
+Figure 5: The end-to-end workflow, steps 1 through 11.
+6. Feature Engineering
+Features are computed at three granularities — per work, per vendor, and per MP — since fraud patterns show up differently at each level.
+Figure 6: Engineered features grouped by granularity — work, vendor, and MP level.
+6.1 Work-level features
+Feature
+Description
+Detects
+disbursed_vs_sanctioned_ratio
+Total expenditure disbursed ÷ sanctioned amount for the work
+Cost overrun
+sanction_vs_recommended_diff_pct
+% change between MP-recommended amount and district-sanctioned amount
+Approval-stage irregularity
+amount_zscore_in_category
+Isolation Forest / z-score of Amount Disbursed within the same Work Category nationally
+Category-relative cost outliers
+days_sanctioned_to_completion
+Days between Sanction Date and Completion Date
+Delay / stalled work
+is_overdue_1yr_rule
+Boolean: still open 365+ days after sanction
+Hard rule violation (stalled)
+work_status_stage_duration
+Days spent in current Work Status stage (Vendor ID / Physical Inspection / etc.)
+Bottleneck / stalling
+duplicate_work_id_flag
+Exact work_id collision across records
+Duplicate/fake entry
+desc_similarity_max_score
+Highest TF-IDF/cosine similarity of this work's description to any other work nationally
+Near-duplicate / fake work
+image_duplicate_flag
+Perceptual hash match to another work's completion image
+Reused/fake completion photo
+image_missing_flag
+No valid completion image on record
+Unverifiable completion
+disallowed_category_keyword_flag
+Description/category matches religious-site, private-trust or non-durable-asset terms
+Rule violation (disallowed spend)
+6.2 Vendor-level features
+Feature
+Description
+Detects
+vendor_ida_count
+Number of distinct districts (IDAs) a vendor is paid under
+Suspicious contractor spread
+vendor_mp_count
+Number of distinct MPs a vendor is paid under
+Cross-constituency favoritism
+vendor_is_individual_flag
+Heuristic: vendor name has no company suffix (Ltd/Pvt/Enterprises/Co.)
+Distinguishes shell/individual from legitimate large suppliers
+vendor_concentration_score
+Combines the above three into one 0–1 score; large legitimate manufacturers (e.g. vehicle makers) are excluded via a known-company allow-list
+Weird approval / repeat-contractor patterns
+6.3 MP / scheme-level features
+Feature
+Description
+Detects
+allocation_utilization_ratio
+Σ Disbursed ÷ Allocated Amount, per MP
+Under- or over-utilization of entitlement
+calamity_vs_allocation_check
+Consent Amount + Disbursed ≤ Allocated Amount
+Hard rule violation (over-commitment)
+sc_st_allocation_compliance_ratio
+Share of an MP's sanctioned amount going to SC/ST-benefiting works vs. the 15%/7.5% mandate
+Equity non-compliance
+expenditure_spike_before_deadline
+Spike in disbursed amount in the last month of a financial year vs. that MP's own average
+“Use-it-or-lose-it” fund-dumping pattern
+7. Machine Learning & AI Components — Detail
+7.1 Rule Engine (deterministic layer)
+Runs first, before any ML scoring. Encodes explicit, citable MPLADS rules rather than statistical guesses:
+Sanction-to-completion must not exceed 1 year — violation → automatic high-risk flag.
+Total (Disbursed + Calamity Consent) must not exceed a MP's Allocated Amount.
+Funds must not go to religious structures, private trusts/individuals, or non-durable assets — keyword/classifier check against description text.
+SC/ST allocation quotas (15% / 7.5%) must be met across an MP's yearly portfolio.
+Because these are direct rule violations, they bypass the probabilistic score and are surfaced at maximum priority — this keeps the system defensible and auditable, since a human reviewer can trace every hard flag straight back to a named scheme rule.
+7.2 Isolation Forest (unsupervised anomaly detection)
+Applied to continuous work-level and vendor-level features (cost ratios, durations, concentration scores). Chosen because MPLADS has no reliable labeled fraud dataset — Isolation Forest needs no labels; it isolates points that are statistically far from the bulk of the data via random recursive partitioning, and outputs an anomaly score per record. This catches novel patterns that were never anticipated at rule-design time.
+7.3 XGBoost + SMOTE (supervised risk scoring)
+Stage-two model. Training labels come from three sources: (a) hard rule violations from Section 7.1, (b) top-ranked Isolation Forest anomalies, and (c) known irregularity cases sourced from published CAG audit reports on MPLADS — used as genuine, citable ground truth rather than only synthetic fraud injection. Because true positives are rare, SMOTE (Synthetic Minority Oversampling) balances the training set before fitting XGBoost, which then outputs a calibrated 0–1 risk probability per work using gradient-boosted decision trees over all engineered features.
+7.4 SHAP (explainability layer)
+Wraps the XGBoost output to attribute the score to specific features — e.g. “flagged due to 340% cost deviation from category median + vendor active across 6 districts.” This is what makes the score usable by a non-technical district auditor and defensible in an official report, rather than an opaque number.
+7.5 Text similarity (duplicate/fake work detection)
+TF-IDF vectorization of Work Description + cosine similarity (scikit-learn), backed by rapidfuzz for fast fuzzy string matching on shorter fields (Work name, IDA name). Any pair of works above a similarity threshold, especially across different constituencies, is flagged for manual comparison. A multilingual sentence-embedding model (e.g. a Sentence-Transformers multilingual variant) is a natural upgrade path once Hindi/regional-language description quality is confirmed clean.
+7.6 Perceptual image hashing (duplicate completion photo detection)
+Uses the imagehash library (difference hashing / pHash) to fingerprint each completion image and detect near-identical images reused across different “completed” works — a strong, visually demonstrable fraud signal. A basic pretrained image classifier (e.g. a lightweight CNN or vision-transformer checkpoint) can additionally sanity-check that an image plausibly matches its declared Work Category (e.g. a road vs. a hall) as a stretch goal; full satellite before/after change detection (e.g. on open Sentinel-2 imagery) is scoped as future work rather than hackathon-timeline scope.
+8. Composite Risk Scoring & Case Management
+Every work receives one Risk Score from 0–100:
+Any hard rule violation (Section 7.1) → score fixed at 80–100, regardless of ML output.
+Otherwise: Risk Score = 40% × normalized Isolation Forest anomaly score  +  40% × XGBoost risk probability  +  20% × (vendor concentration score + similarity score, averaged).
+Risk tiers for the dashboard: Low (0–39, informational only), Medium (40–69, periodic review queue), High (70–100, immediate auditor attention).
+Every flagged work carries its SHAP-derived reason string and links back to the exact source rows (recommendation, sanction, completion, expenditure) so an auditor can verify the underlying facts, not just trust the score.
+Figure 7: How the composite Risk Score is calculated, and the resulting risk tiers.
+8.1 Case lifecycle
+Flagged → Under Review → Cleared / Escalated / Confirmed Irregularity. Every transition is logged with the reviewing authority's role and timestamp, and confirmed/cleared outcomes become new training labels for the next XGBoost retraining cycle.
+9. Technology Stack
+Layer
+Technology
+Data processing
+Python, pandas, numpy
+Unsupervised anomaly detection
+scikit-learn (IsolationForest)
+Supervised risk model
+XGBoost, imbalanced-learn (SMOTE)
+Explainability
+SHAP
+Text similarity
+scikit-learn (TF-IDF), rapidfuzz, (optional) sentence-transformers
+Image similarity
+imagehash, Pillow, (optional) OpenCV / lightweight CNN
+Backend / API
+FastAPI, Uvicorn, Pydantic
+Database
+PostgreSQL, SQLAlchemy
+Scheduling / ETL
+Apache Airflow or cron (batch jobs matching portal update frequency)
+Frontend
+React, Tailwind CSS, Recharts / D3.js (vendor-network graphs)
+Auth
+JWT, role-based access control (MP / District / State / Ministry)
+Deployment
+Docker, docker-compose (single-VM or cloud, e.g. AWS/GCP)
+Version control
+Git / GitHub
+10. Role-Based Dashboards
+Stakeholder
+View
+Ministry (MoSPI)
+National heat-map of risk by state/IDA, top flagged vendors, scheme-wide trend charts, compliance summary
+State Nodal Authority
+State-level drill-down: districts ranked by risk, cross-district vendor patterns
+District Authority (IDA)
+Case queue for that district, SHAP explanation per flagged work, clear/escalate actions
+Member of Parliament
+Personal transparency view: allocation utilization, portfolio compliance status (SC/ST quota, disallowed-category checks) — framed as self-verification, not accusation
+Figure 8: One shared risk engine, four role-based dashboard views.
+11. API Design (indicative)
+Endpoint
+Purpose
+POST /ingest
+Load/refresh a batch of source table exports
+GET /works/{work_id}/risk
+Retrieve risk score, tier and SHAP explanation for a work
+GET /alerts?tier=high&state=...
+List flagged works, filterable by tier, state, IDA, MP
+POST /cases/{work_id}/action
+Auditor records cleared / escalated / confirmed decision
+GET /dashboard/summary?role=...
+Aggregated view scoped to the caller's role
+12. Evaluation Strategy
+Ground-truth validation: run the trained model against known irregularity cases published in CAG audit reports and report how many the model would have flagged.
+Rule-violation recall: 100% by construction for hard-rule checks (1-year rule, allocation ceiling, disallowed categories) since these are deterministic.
+Precision on ML-only flags: manual audit-style review of a sample of Medium/High tier flags that are not hard-rule violations.
+Continuous evaluation: auditor clear/escalate/confirm decisions logged and used to track precision drift over time.
+13. Deployment & Scalability
+The current tables (85K+ expenditure rows, 35K+ completed works) run comfortably on a single-node batch pipeline. The architecture scales horizontally: the ETL/feature/scoring stages are stateless batch jobs that can be sharded by state, and PostgreSQL/FastAPI scale independently of the ML layer. A scheduled batch run (daily or weekly, matching the portal's own update cadence) re-scores new and updated works; no real-time streaming is required for the current data-availability model.
+14. Limitations & Future Scope
+No official MPLADS fraud ground truth exists publicly — mitigated via CAG report cross-validation, but should be stated plainly to reviewers.
+Completion images are largely unavailable in the current export (placeholder “Images” text rather than files/links) — duplicate-image detection needs a confirmed image data source from the Ministry.
+Fund-misuse (category drift) detection depends on the work_id remaining consistent across the sanction and completion stages; this should be validated on the full dataset before being presented as a fully solved capability.
+Cost-overrun detection currently compares Disbursed vs. Sanctioned amount; adding state PWD Schedule-of-Rates benchmarks would turn this into an even stronger “% above official government rate” metric.
+Full satellite-based before/after construction verification is scoped as a future phase requiring integration with open satellite imagery (e.g. Sentinel-2) and is not part of the current build.
+Regional-language (Hindi and other) text in Work Description shows encoding issues in the current export; a language-aware cleaning/OCR step would improve text-similarity accuracy.
+Prepared as a technical solution reference for SIH 2026, Problem Statement 26102 (MoSPI — DIID).

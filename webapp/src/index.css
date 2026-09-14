@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* ANVESHAN — AI Anomaly & Fraud Detection Platform for MPLADS
+   Light-mode palette: Indian National Flag — White · India Green · Saffron
+   Risk colors (deep red / amber / green) reserved exclusively for risk tiers.
+   No dark backgrounds. No gradients. No decorative effects. */
+@theme {
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+
+  /* ── Surfaces ─────────────────────────────────────────────── */
+  --color-base:   #FFFFFF;        /* page background — white */
+  --color-panel:  #F3F8F3;        /* card / panel surface — pale mint */
+  --color-panel2: #E4EFE4;        /* table head / hover — light India green tint */
+  --color-edge:   #B8CEB8;        /* borders — soft green */
+
+  /* ── Typography ───────────────────────────────────────────── */
+  --color-fg:  #0C190C;           /* primary text — near-black, deep green undertone */
+  --color-sub: #375437;           /* secondary text — forest green */
+  --color-mut: #7A967A;           /* disabled / meta — muted green */
+
+  /* ── Risk tiers — EXCLUSIVE to risk data ──────────────────── */
+  --color-tier-low:  #166534;     /* Low risk — rich India green */
+  --color-tier-med:  #B45309;     /* Medium risk — deep amber */
+  --color-tier-high: #B91C1C;     /* High risk — deep red */
+
+  /* ── Hard-rule bypass badge ───────────────────────────────── */
+  --color-rule: #7C2D12;          /* dark sienna — rule override */
+}
+
+html { font-family: var(--font-sans); }
+body { background: var(--color-base); color: var(--color-fg); }
+
+/* Saffron accent (Indian flag) for nav indicators, logo, brand elements.
+   Not in @theme to avoid collision with risk tiers.
+   Use as: bg-[#DC6B00], text-[#DC6B00], border-[#DC6B00] */
+
+.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-edge); border-radius: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }

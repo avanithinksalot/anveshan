@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+webapp/dist/
+
+# Env / secrets
+.env
+.env.local
+
+# Output artifacts (runtime-generated)
+output/*
+!output/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
